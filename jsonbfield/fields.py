@@ -1,4 +1,5 @@
 import json
+import six
 from psycopg2.extras import Json
 
 from django.contrib.postgres import forms, lookups
@@ -6,11 +7,14 @@ from django.contrib.postgres.lookups import PostgresSimpleLookup
 from django.core import exceptions
 from django.db.models import Field, Transform
 from django.utils.translation import ugettext_lazy as _
+from django.core.serializers.json import DjangoJSONEncoder
 
 from jsonbfield import forms as jsonb_forms
 
 __all__ = ['JSONField']
 
+def dumps(value):
+    return DjangoJSONEncoder().encode(value)
 
 class JSONField(Field):
     empty_strings_allowed = False
@@ -39,6 +43,18 @@ class JSONField(Field):
         if isinstance(value, (dict, list)):
             return Json(value)
         return super(JSONField, self).get_prep_lookup(lookup_type, value)
+
+    # Taken from https://github.com/django-extensions/django-extensions/blob/54fe88df801d289882a79824be92d823ab7be33e/django_extensions/db/fields/json.py
+    def get_db_prep_save(self, value, connection, **kwargs):
+        """Convert our JSON object to a string before we save"""
+        if value is None and self.null:
+            return None
+        # default values come in as strings; only non-strings should be
+        # run through `dumps`
+        if not isinstance(value, six.string_types):
+            value = dumps(value)
+
+        return value
 
     def validate(self, value, model_instance):
         super(JSONField, self).validate(value, model_instance)
